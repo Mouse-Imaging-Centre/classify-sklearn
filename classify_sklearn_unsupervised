@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+
+import numpy as np
+import argparse
+import sys
+from pyminc.volumes.factory import *
+from sklearn.feature_extraction.image import grid_to_graph
+from sklearn.cluster import AgglomerativeClustering
+from sklearn.mixture import GMM
+from sklearn import neighbors
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Scikit-learn based unsupervised classifier")
+    parser.add_argument(
+        '--num-classes',
+        type=int,
+        help="Number of classes in inputs")
+    parser.add_argument(
+        '--mask',
+        help="Mask within which to classify")
+    parser.add_argument(
+        '--classifier',
+        choices=["hierarchical", "gmm", "knn"],
+        help="Choice of classifier")
+    parser.add_argument(
+        '--probabilities',
+        action="store_true",
+        help="Output probabilities (only available if classifier is GMM)")
+    parser.add_argument(
+        'inputs', nargs='+',
+        help="Input files - one feature per input file")
+    parser.add_argument('output', help="Output file")
+    args = parser.parse_args()
+
+    featureVols = [volumeFromFile(x) for x in args.inputs]
+    outVol = volumeLikeFile(args.inputs[0], args.output)
+
+    # load the mask if so desired
+    if args.mask:
+        maskVol = volumeFromFile(args.mask)
+        # mask1D = maskVol.data.reshape(-1)
+        featureSize = float(np.sum(maskVol.data > 0.5))
+    else:
+        featureSize = np.prod(featureVols[0].data.shape)
+
+    predictData = np.zeros([featureSize, len(featureVols)])
+
+    for i in range(len(featureVols)):
+        if args.mask:
+            predictData[:,i] = featureVols[i].data[maskVol.data>0.5].reshape(-1)
+        else:
+            predictData[:,i] = featureVols[i].data.reshape(-1)
+
+    if args.classifier == "hierarchical":
+        connectivity = grid_to_graph(*featureVols[0].data.shape, mask=maskVol.data>0.5)
+        clf = AgglomerativeClustering(
+            n_clusters = args.num_classes,
+            linkage="ward",
+            connectivity=connectivity)
+
+        if args.mask:
+            outVol.data[maskVol.data>0.5] = clf.fit(predictData).labels_ +1
+        else:
+            outVol.data[:,:,:] = clf.fit(predictData).labels_.reshape(outVol.data.shape) +1
+    elif args.classifier == "gmm":
+        clf = GMM(n_components = args.num_classes, covariance_type="full")
+    elif args.classifier == "knn":
+        clf = neighbors.NearestNeighbors()
+
+
+    # all classifiers except for hierarchical clustering use the same calling convention for predictions
+    if args.classifier != "hierarchical":
+        clf.fit(predictData)
+        if args.mask:
+            outVol.data[maskVol.data>0.5] = clf.predict(predictData)+1
+        else:
+            outVol.data[:,:,:] = clf.predict(predictData).reshape(outVol.data.shape)+1
+    outVol.writeFile()
+    outVol.closeVolume()
