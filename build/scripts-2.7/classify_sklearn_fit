@@ -1,0 +1,137 @@
+#!/Users/jason/Library/Enthought/Canopy_64bit/User/bin/python
+
+import numpy as np
+import argparse
+import pickle
+import sys
+from pyminc.volumes.factory import *
+from sklearn.naive_bayes import GaussianNB
+from sklearn import svm,tree,linear_model
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.externals import joblib
+from sklearn.metrics import classification_report
+from sklearn.calibration import CalibratedClassifierCV
+from sklearn.semi_supervised import label_propagation
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn import preprocessing
+
+# a few functions to handle tag files. This should likely be moved to pyminc itself
+
+def parseTagFile(tagfile):
+    """simplistic code to parse a tag file for classification"""
+    f = open(tagfile)
+    lines = f.readlines()
+    # get individual lines
+    asarray = [x.split() for x in lines]
+    # get rid of the header by only keeping lines with seven elements
+    kept = [x for x in asarray if len(x) == 7]
+    # keep only the first set of coordinates and the label
+    processed = np.array([np.array(x)[[0,1,2,6]] for x in kept])
+    s = processed.shape
+    # get rid of the trailing semi colon and quotes
+    processed[s[0]-1,3] = processed[s[0]-1,3].strip(";")
+    processed = np.array([[y.strip('"') for y in x] for x in processed], 'float')
+    return(processed)
+
+def convertTagToVoxelCoordinates(tags, vol):
+    """take an array of world coordinates and return the corresponding voxel coords"""
+    coords = np.array([vol.convertWorldToVoxel(x[0:3]) for x in tags]).round().astype('int')
+    return(coords)
+
+if __name__ == "__main__":
+
+    parser = argparse.ArgumentParser(description="Scikit-learn based classifier", formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument(
+        '--classifier',
+        choices=["bayes", "tree", "randomforest", "logistic", "svm", "knn"],
+        default="bayes", help="The classification algorithm to use")
+    parser.add_argument(
+        '--calibrate-classifier',
+        action="store_true",
+        help="Perform a cross-validation calibration on the classifier. Makes a difference to the estimated probabilities")
+    parser.add_argument(
+        '--scale', action="store_true",
+        help="Scale the data before classification. Recommended for SVM kernels other than linear")
+    svmgroup = parser.add_argument_group("SVM options")
+    svmgroup.add_argument(
+        '--svm-kernel', choices=["linear", "poly", "rbf"],
+        default="linear", help="The kernel to use for SVM classification")
+    parser.add_argument(
+        'inputs', nargs='+',
+        help="Input files. Have to always be in the same order, with tag file coming first followed by each feature MINC volume")
+    parser.add_argument('output_classifier', help="The trained classifier")
+    args = parser.parse_args()
+
+    #print(dir(args))
+
+    # get the number of tag files in the input arguments
+    istagfile = [x.endswith(".tag") for x in args.inputs]
+    numtags = sum(istagfile)
+
+    # checks for right number of minc files
+    if ((len(args.inputs) - numtags) % numtags) != 0:
+        sys.exit("Error: the number of input features does not seem consistent with the number of tag files.")
+
+    numFeatures = (len(args.inputs)-numtags)/numtags
+    overallCounter = 0
+    for i in range(numtags):
+        # tagfile comes first
+        tagfile = args.inputs.pop(overallCounter)
+        # remaining inputs are features
+        for j in range(overallCounter, overallCounter+numFeatures):
+            featureVols = [volumeFromFile(x) for x in args.inputs[overallCounter:overallCounter+numFeatures]]
+
+        # read the tag file, then get coords in voxel space
+        tags = parseTagFile(tagfile)
+        tagCoords = convertTagToVoxelCoordinates(tags, featureVols[0])
+
+        # if desired, scale the input values before grabbing the training data from them
+        if args.scale:
+            for i in range(len(featureVols)):
+                featureVols[i].data = preprocessing.scale(featureVols[i].data.reshape(-1)).reshape(featureVols[i].data.shape)
+
+        # assemble the values from each of the features
+        trainingData = np.zeros([len(tagCoords), numFeatures])
+        for i in range(numFeatures):
+            trainingData[:,i] = [featureVols[i].data[x[0], x[1], x[2]] for x in tagCoords]
+
+        # combine the training data from different features
+        try:
+            combinedTrainingData = np.concatenate([combinedTrainingData, trainingData])
+            combinedLabels = np.concatenate([combinedLabels, tags[:,3]])
+        except NameError:
+            combinedTrainingData = trainingData
+            combinedLabels = tags[:,3]
+
+        overallCounter = overallCounter + numFeatures
+    # train the classifier
+
+    if args.classifier == "bayes":
+        clf = GaussianNB()
+    elif args.classifier == "tree":
+        clf = tree.DecisionTreeClassifier()
+    elif args.classifier == "randomforest":
+        clf = RandomForestClassifier(n_estimators=10)
+    elif args.classifier == "logistic":
+        clf = linear_model.LogisticRegression()
+    elif args.classifier == "svm":
+        clf = svm.SVC(probability=True, kernel=args.svm_kernel)
+    elif args.classifier == "knn":
+        clf = KNeighborsClassifier()
+
+
+    # the actual training
+    if args.calibrate_classifier:
+        clf = CalibratedClassifierCV(clf)
+
+    clf.fit(combinedTrainingData, combinedLabels)
+    # calibrate the probability curves
+
+    # predict the output on the training data to get a coarse estimate of accuracy
+    predicted = clf.predict(combinedTrainingData)
+    print(classification_report(combinedLabels, predicted))
+
+    # output the classifier by scikits pickling
+    # TODO: check if output exists and clobber specified
+    joblib.dump(clf, args.output_classifier)
+    #pickle.dump(clf, open(args.output_classifier))
