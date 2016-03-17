@@ -4,6 +4,7 @@ import numpy as np
 import argparse
 import pickle
 import sys
+import os
 from pyminc.volumes.factory import *
 from sklearn.naive_bayes import GaussianNB
 from sklearn import svm,tree,linear_model
@@ -52,6 +53,10 @@ if __name__ == "__main__":
     parser.add_argument(
         '--scale', action="store_true",
         help="Scale the data before classification. Recommended for SVM kernels other than linear")
+    parser.add_argument(
+        '--clobber', action="store_true",
+        help="Overwrite the output file (classifier)",
+        default=False)
     svmgroup = parser.add_argument_group("SVM options")
     svmgroup.add_argument(
         '--svm-kernel', choices=["linear", "poly", "rbf"],
@@ -63,7 +68,11 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     #print(dir(args))
-
+    
+    # don't overwrite the output file if we are not clobbering:
+    if os.path.isfile(args.output_classifier) and not args.clobber:
+        sys.exit("\nError: the output file " + args.output_classifier + " exists, and --clobber is not specified.")
+    
     # get the number of tag files in the input arguments
     istagfile = [x.endswith(".tag") for x in args.inputs]
     numtags = sum(istagfile)
@@ -132,6 +141,5 @@ if __name__ == "__main__":
     print(classification_report(combinedLabels, predicted))
 
     # output the classifier by scikits pickling
-    # TODO: check if output exists and clobber specified
     joblib.dump(clf, args.output_classifier)
     #pickle.dump(clf, open(args.output_classifier))

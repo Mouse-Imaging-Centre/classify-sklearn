@@ -3,6 +3,7 @@
 import numpy as np
 import argparse
 import sys
+import os
 from pyminc.volumes.factory import *
 from sklearn.feature_extraction.image import grid_to_graph,img_to_graph
 from sklearn.cluster import AgglomerativeClustering,spectral_clustering
@@ -28,11 +29,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Output probabilities (only available if classifier is GMM)")
     parser.add_argument(
+        '--clobber', 
+        action="store_true", 
+        help="Overwrite the output file (classified MINC)", 
+        default=False)
+    parser.add_argument(
         'inputs', nargs='+',
         help="Input files - one feature per input file")
     parser.add_argument('output', help="Output file")
     args = parser.parse_args()
 
+    # don't overwrite the output file if we are not clobbering:
+    if os.path.isfile(args.output) and not args.clobber:
+        sys.exit("\nError: the output file " + args.output + " exists, and --clobber is not specified.")
+    
+    
     featureVols = [volumeFromFile(x) for x in args.inputs]
     outVol = volumeLikeFile(args.inputs[0], args.output)
 

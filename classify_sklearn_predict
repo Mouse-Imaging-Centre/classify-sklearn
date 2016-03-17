@@ -3,6 +3,8 @@
 import numpy as np
 import argparse
 import pickle
+import os
+import sys
 from pyminc.volumes.factory import *
 from sklearn.naive_bayes import GaussianNB
 from sklearn import svm,tree
@@ -14,11 +16,16 @@ if __name__ == "__main__":
     parser.add_argument('--probabilities', action="store_true", help="Also output the probabilities of each class")
     parser.add_argument('--mask', help="Mask within which to evaluate classifier")
     parser.add_argument('--scale', action="store_true", help="Scale data. Use this option only if --scale was also specified when training the classifier")
+    parser.add_argument('--clobber', action="store_true", help="Overwrite the output file (classified MINC)", default=False)
     parser.add_argument('input_classifier', help="The classifier output from classify_scikit")
     parser.add_argument('feature_volumes', nargs="+", help="Feature volumes. Have to be specified in same order as when training")
     parser.add_argument('output_volume', help="The output minc volume")
     args = parser.parse_args()
 
+    # don't overwrite the output file if we are not clobbering:
+    if os.path.isfile(args.output_volume) and not args.clobber:
+        sys.exit("\nError: the output file " + args.output_volume + " exists, and --clobber is not specified.")
+    
     # load the classifier
     clf = joblib.load(args.input_classifier)
     #clf = pickle.load(open(args.input_classifier))
