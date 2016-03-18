@@ -52,7 +52,6 @@ if __name__ == "__main__":
     if args.scale:
         predictData = preprocessing.scale(predictData)
     # open the output volume
-    # TODO: check for file existance and clobber
     outVol = volumeLikeFile(args.feature_volumes[0], args.output_volume)
 
     # predict and write to file
