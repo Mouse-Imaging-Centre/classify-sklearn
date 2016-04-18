@@ -5,6 +5,7 @@ import argparse
 import pickle
 import sys
 import os
+import subprocess
 from pyminc.volumes.factory import *
 from sklearn.naive_bayes import GaussianNB
 from sklearn import svm,tree,linear_model
@@ -38,6 +39,12 @@ def convertTagToVoxelCoordinates(tags, vol):
     """take an array of world coordinates and return the corresponding voxel coords"""
     coords = np.array([vol.convertWorldToVoxel(x[0:3]) for x in tags]).round().astype('int')
     return(coords)
+
+def can_read_MINC_file(filename):
+    """Can the MINC file `filename` with be read with `mincinfo`?"""
+    with open(os.devnull, 'w') as dev_null:
+        returncode = subprocess.call(["mincinfo", filename], stdout=dev_null, stderr=dev_null) == 0
+    return returncode
 
 if __name__ == "__main__":
 
@@ -88,6 +95,9 @@ if __name__ == "__main__":
         tagfile = args.inputs.pop(overallCounter)
         # remaining inputs are features
         for j in range(overallCounter, overallCounter+numFeatures):
+            for file_instance in args.inputs[overallCounter:overallCounter+numFeatures]:
+                if not can_read_MINC_file(file_instance):
+                    sys.exit("\nError: feature input expected to be a MINC file can not be read as such: " + file_instance)
             featureVols = [volumeFromFile(x) for x in args.inputs[overallCounter:overallCounter+numFeatures]]
 
         # read the tag file, then get coords in voxel space
