@@ -29,9 +29,9 @@ if __name__ == "__main__":
         action="store_true",
         help="Output probabilities (only available if classifier is GMM)")
     parser.add_argument(
-        '--clobber', 
-        action="store_true", 
-        help="Overwrite the output file (classified MINC)", 
+        '--clobber',
+        action="store_true",
+        help="Overwrite the output file (classified MINC)",
         default=False)
     parser.add_argument(
         'inputs', nargs='+',
@@ -42,10 +42,10 @@ if __name__ == "__main__":
     # don't overwrite the output file if we are not clobbering:
     if os.path.isfile(args.output) and not args.clobber:
         sys.exit("\nError: the output file " + args.output + " exists, and --clobber is not specified.")
-    
-    
+
+
     featureVols = [volumeFromFile(x) for x in args.inputs]
-    outVol = volumeLikeFile(args.inputs[0], args.output)
+    outVol = volumeLikeFile(args.inputs[0], args.output, dtype='ubyte', labels=True)
 
     # load the mask if so desired
     if args.mask:

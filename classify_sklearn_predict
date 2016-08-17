@@ -13,7 +13,7 @@ from sklearn.externals import joblib
 from sklearn import preprocessing
 
 
-# This function also lives in the classify_sklearn_fit... Should probably 
+# This function also lives in the classify_sklearn_fit... Should probably
 # altogether move to... a pyminc helper function?
 def can_read_MINC_file(filename):
     """Can the MINC file `filename` with be read with `mincinfo`?"""
@@ -35,7 +35,7 @@ if __name__ == "__main__":
     # don't overwrite the output file if we are not clobbering:
     if os.path.isfile(args.output_volume) and not args.clobber:
         sys.exit("\nError: the output file " + args.output_volume + " exists, and --clobber is not specified.")
-    
+
     # load the classifier
     clf = joblib.load(args.input_classifier)
     #clf = pickle.load(open(args.input_classifier))
@@ -65,7 +65,7 @@ if __name__ == "__main__":
     if args.scale:
         predictData = preprocessing.scale(predictData)
     # open the output volume
-    outVol = volumeLikeFile(args.feature_volumes[0], args.output_volume)
+    outVol = volumeLikeFile(args.feature_volumes[0], args.output_volume, dtype='ubyte', labels=True)
 
     # predict and write to file
     if args.mask:
